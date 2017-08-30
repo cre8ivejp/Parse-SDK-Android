@@ -8,11 +8,10 @@
  */
 package com.parse;
 
-import android.app.Service;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.os.PowerManager;
+import android.support.v4.app.JobIntentService;
 import android.util.SparseArray;
 
 /** package */ final class ServiceUtils {
@@ -26,25 +25,24 @@ import android.util.SparseArray;
    * Same as Context.startService, but logs an error if starting the service fails.
    */
   public static boolean runIntentInService(
-      Context context, Intent intent, Class<? extends Service> clazz) {
-    boolean startedService = false;
-    
-    if (intent != null) {
+      Context context, Intent intent, Class<? extends JobIntentService> clazz) {
+      if (intent == null) {
+        return false;
+      }
+
       if (clazz != null) {
         intent.setClass(context, clazz);
       }
-      
-      ComponentName name = context.startService(intent);
-      
-      startedService = (name != null);
-      if (!startedService) {
+
+      try {
+        PushService.enqueueWork(context, PushService.class, intent);
+      } catch (IllegalArgumentException e) {
         PLog.e(TAG, "Could not start the service. Make sure that the XML tag "
-            + "<service android:name=\"" + clazz + "\" /> is in your "
-            + "AndroidManifest.xml as a child of the <application> element.");
+                + "<service android:name=\"" + clazz + "\" /> is in your "
+                + "AndroidManifest.xml as a child of the <application> element.");
+        return false;
       }
-    }
-    
-    return startedService;
+      return true;
   }
 
   /*
@@ -52,28 +50,28 @@ import android.util.SparseArray;
    * lock must later be released by calling completeWakefulIntent().
    */
   public static boolean runWakefulIntentInService(
-      Context context, Intent intent, Class<? extends Service> clazz) {
+      Context context, Intent intent, Class<? extends JobIntentService> clazz) {
     boolean startedService = false;
-    
+
     if (intent != null) {
       String reason = intent.toString();
-      ParseWakeLock wl = ParseWakeLock.acquireNewWakeLock(context, PowerManager.PARTIAL_WAKE_LOCK, reason, 0);      
-      
+      ParseWakeLock wl = ParseWakeLock.acquireNewWakeLock(context, PowerManager.PARTIAL_WAKE_LOCK, reason, 0);
+
       synchronized (wakeLocks) {
         intent.putExtra(WAKE_LOCK_EXTRA, wakeLockId);
         wakeLocks.append(wakeLockId, wl);
         wakeLockId++;
       }
-      
+
       startedService = runIntentInService(context, intent, clazz);
       if (!startedService) {
         completeWakefulIntent(intent);
       }
     }
-    
+
     return startedService;
   }
-  
+
   /*
    * Releases the wake lock acquired by runWakefulIntentInService for this intent.
    */
@@ -81,12 +79,12 @@ import android.util.SparseArray;
     if (intent != null && intent.hasExtra(WAKE_LOCK_EXTRA)) {
       int id = intent.getIntExtra(WAKE_LOCK_EXTRA, -1);
       ParseWakeLock wakeLock;
-      
+
       synchronized (wakeLocks) {
         wakeLock = wakeLocks.get(id);
         wakeLocks.remove(id);
       }
-      
+
       if (wakeLock == null) {
         PLog.e(TAG, "Got wake lock id of " + id + " in intent, but no such lock found in " +
             "global map. Was completeWakefulIntent called twice for the same intent?");

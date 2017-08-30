@@ -63,7 +63,6 @@ import java.util.concurrent.Executors;
           onHandleIntent(intent);
         } finally {
           ServiceUtils.completeWakefulIntent(intent);
-          stopParent(startId); // automatically stops service if this is the last outstanding task
         }
       }
     });
