@@ -11,7 +11,8 @@ package com.parse;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
-import android.os.IBinder;
+import android.support.annotation.NonNull;
+import android.support.v4.app.JobIntentService;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -103,8 +104,9 @@ import java.util.List;
  * launch the app's launcher activity. To customize this behavior override
  * {@link ParsePushBroadcastReceiver#onPushOpen(Context, Intent)}.
  */
-public final class PushService extends Service {
+public final class PushService extends JobIntentService {
   private static final String TAG = "com.parse.PushService";
+  private static final int JOB_ID = 1001;
 
   /* package */ static final String ACTION_START_IF_REQUIRED =
       "com.parse.PushService.startIfRequired";
@@ -118,6 +120,10 @@ public final class PushService extends Service {
   /* package */ interface ServiceLifecycleCallbacks {
     void onServiceCreated(Service service);
     void onServiceDestroyed(Service service);
+  }
+
+  /* package */ static void enqueueWork(Context context, Class clazz, Intent intent) {
+    enqueueWork(context, clazz, JOB_ID, intent);
   }
 
   /* package */ static void registerServiceLifecycleCallbacks(ServiceLifecycleCallbacks callbacks) {
@@ -257,29 +263,15 @@ public final class PushService extends Service {
     dispatchOnServiceCreated(this);
   }
 
-  /**
-   * Client code should not call {@code onStartCommand} directly.
-   */
   @Override
-  public int onStartCommand(Intent intent, int flags, int startId) {
+  protected void onHandleWork(@NonNull Intent intent) {
     switch (ManifestInfo.getPushType()) {
       case PPNS:
       case GCM:
-        return proxy.onStartCommand(intent, flags, startId);
+        proxy.onStartCommand(intent, 0, JOB_ID);
       default:
         PLog.e(TAG, "Started push service even though no push service is enabled: " + intent);
-        ServiceUtils.completeWakefulIntent(intent);
-        return START_NOT_STICKY;
     }
-  }
-
-  /**
-   * Client code should not call {@code onBind} directly.
-   */
-  @Override
-  public IBinder onBind(Intent intent) {
-    throw new IllegalArgumentException("You cannot bind directly to the PushService. "
-        + "Use PushService.subscribe instead.");
   }
 
   /**
